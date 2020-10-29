@@ -7,12 +7,12 @@ CONFIG="nbgrader_config.py"
 SOURCE="source"
 FEEDBACK="feedback"
 
-usage() { echo "Usage: $0 [-a <assignment string>] [-n <notebooks dir>] [-p <prefix string>] <zip file>" 1>&2; exit 1; }
+usage() { echo "Usage: $0 -a <assignment string> [-n <notebooks dir>] [-p <prefix string>] <zip file>" 1>&2; exit 1; }
 
 debug() {
-	if [ DEBUG == 1 ]
-		then
-			echo "[DEBUG] $@"
+	if [ $DEBUG == 1 ]
+	then
+		echo "[DEBUG] $@"
 	fi
 }
 
@@ -108,12 +108,19 @@ fi
 popd > /dev/null
 
 nbgrader zip_collect ${assignment} && \
-nbgrader autograde ${assignment} && \
+nbgrader autograde ${assignment}
+
+if [ $? != 0 ]
+then
+	echo 'There were errors! Not proceeding.' 1>&2
+	exit 4
+fi
 
 echo
 read -p "Start formgrading? " -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
+	# `nbgrader formgrade` has been deprecated :(
 	echo 'Starting jupyter notebook.'
 	echo 'Please use the formgrader tab for manual grading!'
 	echo "Abort with Ctrl-c when you're done."
@@ -132,10 +139,11 @@ then
 	cd $output
 	find * -type f -name \*.html | while read line
 	do
-		cp $line $(echo "$line" | sed 's|/|-|g')
+		cp $line $(echo "$line" | tr '/' '-')
 	done
 	popd > /dev/null
 
+	echo
 	echo "Feedback generated:"
 	ls ${output}/*.html
 fi
