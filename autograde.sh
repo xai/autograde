@@ -74,7 +74,6 @@ SAVEIFS=$IFS
 IFS=$'\n'
 for i in $(zipinfo -1 "$input")
 do
-	[ -f "$i" ] && debug 
 	group=$(echo "$i" | sed 's/^Gruppe \([0-9]\+\)__.*/\1/')
 	extension=$(echo "$i" | rev | cut -d'.' -f1 | rev)
 	debug "Found assignment for group $group in $i"
