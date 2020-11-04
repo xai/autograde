@@ -30,7 +30,7 @@ class Re(object):
         return self.last_match
 
 
-def get_notebook_name(api, assignment, source):
+def get_notebook_name(api, assignment):
     notebooks = api.get_notebooks(assignment)
 
     if not notebooks:
@@ -189,16 +189,12 @@ def main():
                         type=str,
                         required=True)
     parser.add_argument('-f', '--force',
-                        help='Pass --force to ngbrader',
+                        help='Pass --force to autograde',
                         action="store_true")
     parser.add_argument('-o', '--output',
                         help='Output directory',
                         type=str,
                         default='submitted')
-    parser.add_argument('-s', '--source',
-                        help='Source directory',
-                        type=str,
-                        default='source')
     parser.add_argument('-p', '--prefix',
                         help='Prefix string for the filenames',
                         type=str)
@@ -207,7 +203,7 @@ def main():
 
     assignment = args.assignment
     api = setup()
-    notebook_filename = get_notebook_name(api, assignment, args.source)
+    notebook_filename = get_notebook_name(api, assignment)
 
     for inputfile in args.inputfiles:
         submissions = collect(inputfile, args.output, assignment,
@@ -224,7 +220,7 @@ def main():
     formgrade()
 
     for student in autograded:
-        generate_feedback(api, assignment, student, args.force)
+        generate_feedback(api, assignment, student, True)
 
 
 if __name__ == "__main__":
