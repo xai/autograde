@@ -198,9 +198,7 @@ def main():
                         help='Output directory',
                         type=str,
                         default='submitted')
-    parser.add_argument('-p', '--prefix',
-                        help='Prefix string for the filenames',
-                        type=str)
+
     parser.add_argument('inputfiles', default=[], nargs='+')
     args = parser.parse_args()
 
