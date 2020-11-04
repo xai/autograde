@@ -179,6 +179,19 @@ def formgrade():
 
 def generate_feedback(api, assignment, student, force):
     api.generate_feedback(assignment, student, force)
+    api.release_feedback(assignment, student)
+
+
+def collect_feedback(api, assignment, student, output, notebook_filename):
+    feedbackdir = 'feedback'
+    html = os.path.join(feedbackdir, student, assignment,
+                        os.path.splitext(notebook_filename)[0] + '.html')
+
+    if os.path.exists(html):
+        target = os.path.join(output, student + '.html')
+        logging.info("Collecting feedback from: %s" % html)
+        shutil.copy(html, target)
+        return 1
 
 
 def main():
@@ -195,7 +208,11 @@ def main():
                         help='Pass --force to autograde',
                         action="store_true")
     parser.add_argument('-o', '--output',
-                        help='Output directory',
+                        help='Output directory for html feedback',
+                        type=str,
+                        default='upload')
+    parser.add_argument('-s', '--submissiondir',
+                        help='Submission directory',
                         type=str,
                         default='submitted')
 
@@ -203,11 +220,12 @@ def main():
     args = parser.parse_args()
 
     assignment = args.assignment
+    output = os.path.join(args.output, assignment)
     api = setup()
     notebook_filename = get_notebook_name(api, assignment)
 
     for inputfile in args.inputfiles:
-        submissions = collect(inputfile, args.output, assignment,
+        submissions = collect(inputfile, args.submissiondir, assignment,
                               notebook_filename)
 
         if submissions:
@@ -220,8 +238,14 @@ def main():
 
     formgrade()
 
+    os.makedirs(output, exist_ok=True)
+    reports = 0
     for student in autograded:
         generate_feedback(api, assignment, student, True)
+        reports += collect_feedback(api, assignment, student, output,
+                                    notebook_filename)
+
+    logging.info("%d reports written to %s" % (reports, output))
 
 
 if __name__ == "__main__":
