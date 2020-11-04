@@ -3,17 +3,17 @@
 # vim:fenc=utf-8
 
 import argparse
+import logging
 import os
 import re
 import shutil
 import tempfile
 import zipfile
 
-from plumbum.colors import warn
-from plumbum.colors import info
-from plumbum.colors import success
-# from plumbum import local
-# from plumbum.commands.processes import ProcessExecutionError
+import coloredlogs
+from nbgrader.apps import NbGraderAPI
+from traitlets.config import Config
+import py7zr
 
 
 class Re(object):
@@ -30,29 +30,46 @@ class Re(object):
         return self.last_match
 
 
+def get_notebook_name(api, assignment, source):
+    notebooks = api.get_notebooks(assignment)
+
+    if not notebooks:
+        logging.fatal("No source notebooks found for assignment")
+        raise RuntimeError
+
+    return notebooks[0]['name'] + ".ipynb"
+
+
+def filter(items):
+    return [i for i in items if not i.startswith('__MACOSX/')
+            and not i.startswith('.')
+            and not os.path.basename(i).startswith('.')]
+
+
 def extract_zip(inputfile, target):
     filename, ext = os.path.splitext(inputfile)
+    extracted = []
 
-    assert (ext == '.zip'), "Not a .zip file!"
-    
-    with zipfile.ZipFile(inputfile, 'r') as zipFile:
-        extracted = []
-        for item in zipFile.infolist():
-            # exclude hidden directories (that have likely been inserted
-            # accidentally
-            if not str(item.filename).startswith('__MACOSX/') and \
-               not str(item.filename).startswith('.') and \
-               not os.path.basename(str(item.filename)).startswith('.'):
+    if ext == '.zip':
+        with zipfile.ZipFile(inputfile, 'r') as zipFile:
+            for item in filter(zipFile.namelist()):
                 zipFile.extract(item, path=target)
-                extracted.append(str(item.filename))
+                extracted.append(item)
 
-        return [os.path.join(target, f) for f in extracted]
+    elif ext == '.7z':
+        with py7zr.SevenZipFile(inputfile, 'r') as zipFile:
+
+            for item in filter(zipFile.getnames()):
+                zipFile.extract(path=target, targets=item)
+                extracted.append(item)
+    else:
+        raise NotImplementedError
+
+    return [os.path.join(target, f) for f in extracted]
 
 
-def extract_files(inputfile, target, submission):
+def extract_files(inputfile, target, submission, notebook_filename):
     filename, ext = os.path.splitext(inputfile)
-    basename = os.path.basename(inputfile)
-    notebook_filename = 'notebook-1.ipynb'
     data_filename = 'data'
 
     notebook = None
@@ -61,8 +78,10 @@ def extract_files(inputfile, target, submission):
     with tempfile.TemporaryDirectory() as tmpdir:
         if ext == '.ipynb':
             files.append(inputfile)
-        elif ext == '.zip':
+        elif ext == '.zip' or ext == '.7z':
             files.extend(extract_zip(inputfile, tmpdir))
+        else:
+            raise NotImplementedError
 
         for f in files:
             fname, fext = os.path.splitext(f)
@@ -73,19 +92,18 @@ def extract_files(inputfile, target, submission):
                                     os.path.join(submission['dir'],
                                                  notebook_filename))
                 else:
-                    print(warn | ("More than one notebooks found in"
-                                  "submission"))
+                    logging.warning("Multiple notebooks found in submission!")
             elif f == data_filename:
                 shutil.copy(f, os.path.join(submission['dir'],
                                             data_filename))
 
         if not notebook:
-            print(warn | "No notebook found in submission!")
+            logging.warning("No notebook found in submission!")
 
     return files
 
 
-def prepare_submissions(inputfile, target, assignment):
+def collect(inputfile, target, assignment, notebook_filename):
     submissions = []
     pattern_student = (rf"^(?P<type>h)(?P<number>[0-9]+)_"
                        rf"(?P<firstname>[^_]+)_"
@@ -102,82 +120,111 @@ def prepare_submissions(inputfile, target, assignment):
     if gre.match(pattern_student, basename) or \
        gre.match(pattern_group, basename):
         submission = {}
-        submission['type'] = 'student' \
-                if gre.last_match.group('type') == 'h' \
-                else 'group'
-        submission['number'] = gre.last_match.group('number')
-        submission['dir'] = os.path.join(target, submission['number'], assignment)
+
+        if gre.last_match.group('type') == 'h':
+            submission['type'] = 'student'
+            submission['number'] = gre.last_match.group('number')
+        else:
+            submission['type'] = 'group'
+            submission['number'] = 'group' + gre.last_match.group('number')
+
+        submission['dir'] = os.path.join(target, submission['number'],
+                                         assignment)
         os.makedirs(submission['dir'], exist_ok=True)
 
-        print(success | ("%s submission found: %s" % (submission['type'],
-                                                      basename)))
+        logging.info("%s submission found: %s" % (submission['type'],
+                                                  basename))
 
-        extract_files(inputfile, target, submission)
+        extract_files(inputfile, target, submission, notebook_filename)
 
         submissions.append(submission)
     else:
         if ext == '.ipynb':
-            print(warn | ("Unmatched notebook found in %s" % inputfile))
-        elif ext == '.zip':
+            logging.warning("Unmatched notebook found in %s" % inputfile)
+        elif ext == '.zip' or ext == '.7z':
             with tempfile.TemporaryDirectory() as tmpdir:
-                print("Extracting %s to %s" % (inputfile, tmpdir))
+                logging.info("Extracting %s to %s" % (inputfile, tmpdir))
                 for f in extract_zip(inputfile, tmpdir):
-                    submissions.extend(prepare_submissions(f, target,
-                                                           assignment))
+                    submissions.extend(collect(f, target,
+                                               assignment,
+                                               notebook_filename))
         else:
-            print(warn | ("Don't know what to do with file: %s" % inputfile))
+            logging.warning("Don't know what to do with file: %s" % inputfile)
             raise NotImplementedError
 
     return submissions
 
 
-def collect():
-    pass
+def setup():
+    config = Config()
+    config.Exchange.root = "/tmp/exchange"
+    config.CourseDirectory.submitted_directory = 'submitted'
+    config.CourseDirectory.course_id = 'example_course'
+    return NbGraderAPI(config=config)
 
 
-def autograde():
-    pass
+def autograde(api, assignment, force):
+    for student in api.get_submitted_students(assignment):
+        api.autograde(assignment, student, force=force)
+
+    return api.get_autograded_students(assignment)
 
 
 def formgrade():
-    pass
+    logging.warning("Formgrading must be done manually in a jupyter instance!")
 
 
-def generate_feedback():
-    pass
+def generate_feedback(api, assignment, student, force):
+    api.generate_feedback(assignment, student, force)
 
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
+    # coloredlogs.install(fmt='%(asctime)s %(levelname)s %(message)s')
+    coloredlogs.install(fmt='%(levelname)s %(message)s')
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--assignment',
                         help='Name of the assignment',
                         type=str,
                         required=True)
-    parser.add_argument('-n', '--noop',
-                        help='Do not actually run',
+    parser.add_argument('-f', '--force',
+                        help='Pass --force to ngbrader',
                         action="store_true")
     parser.add_argument('-o', '--output',
                         help='Output directory',
                         type=str,
                         default='submitted')
+    parser.add_argument('-s', '--source',
+                        help='Source directory',
+                        type=str,
+                        default='source')
     parser.add_argument('-p', '--prefix',
                         help='Prefix string for the filenames',
                         type=str)
     parser.add_argument('inputfiles', default=[], nargs='+')
     args = parser.parse_args()
 
+    assignment = args.assignment
+    api = setup()
+    notebook_filename = get_notebook_name(api, assignment, args.source)
+
     for inputfile in args.inputfiles:
-        submissions = prepare_submissions(inputfile, args.output, args.assignment)
+        submissions = collect(inputfile, args.output, assignment,
+                              notebook_filename)
 
         if submissions:
-            print(success | ("Found %i submissions" % len(submissions)))
+            logging.info("Found %i submissions" % len(submissions))
         else:
-            print(warn | "No submissions found.")
+            logging.warning("No submissions found.")
 
-    collect()
-    autograde()
+    autograded = autograde(api, assignment, args.force)
+    logging.info("%d submissions have been autograded" % len(autograded))
+
     formgrade()
-    generate_feedback()
+
+    for student in autograded:
+        generate_feedback(api, assignment, student, args.force)
 
 
 if __name__ == "__main__":

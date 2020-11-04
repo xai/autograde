@@ -83,6 +83,8 @@ do
 done
 IFS=$SAVEIFS
 
+popd > /dev/null
+
 if [ ! -f $CONFIG ]
 then
 	cat <<EOF > $CONFIG
@@ -103,8 +105,6 @@ c.FileNameCollectorPlugin.named_regexp = (
 )
 EOF
 fi
-
-popd > /dev/null
 
 nbgrader zip_collect ${assignment} && \
 nbgrader autograde ${assignment}
