@@ -172,6 +172,9 @@ def autograde(api, assignment, force):
 
 def formgrade():
     logging.warning("Formgrading must be done manually in a jupyter instance!")
+    logging.warning("Run `jupyter notebook --no-browser` and grade manually.")
+
+    input("Press Enter to continue when you are done grading ...")
 
 
 def generate_feedback(api, assignment, student, force):
