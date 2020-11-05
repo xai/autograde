@@ -70,7 +70,7 @@ def extract_zip(inputfile, target):
 
 def extract_files(inputfile, target, submission, notebook_filename):
     filename, ext = os.path.splitext(inputfile)
-    data_filename = 'data'
+    datadir = 'data'
 
     notebook = None
     files = []
@@ -85,20 +85,24 @@ def extract_files(inputfile, target, submission, notebook_filename):
 
         for f in files:
             fname, fext = os.path.splitext(f)
+            logging.debug("> %s" % f)
             if fext == '.ipynb':
+                logging.debug("notebook found: %s" % f)
                 if not notebook:
                     notebook = f
                     shutil.copyfile(notebook,
                                     os.path.join(submission['dir'],
                                                  notebook_filename))
                 else:
-                    logging.warning("Multiple notebooks found in submission!")
-            elif f == data_filename:
-                shutil.copy(f, os.path.join(submission['dir'],
-                                            data_filename))
+                    logging.fatal("Multiple notebooks found in submission!")
+            elif os.path.isdir(f) and \
+                    os.path.basename(os.path.dirname(f)) == datadir:
+                logging.debug("Data dir found")
+                shutil.copytree(f, os.path.join(submission['dir'],
+                                            datadir), dirs_exist_ok=True)
 
         if not notebook:
-            logging.warning("No notebook found in submission!")
+            logging.fatal("No notebook found in submission!")
 
     return files
 
@@ -140,7 +144,7 @@ def collect(inputfile, target, assignment, notebook_filename):
         submissions.append(submission)
     else:
         if ext == '.ipynb':
-            logging.warning("Unmatched notebook found in %s" % inputfile)
+            logging.fatal("Unmatched notebook found in %s" % inputfile)
         elif ext == '.zip' or ext == '.7z':
             with tempfile.TemporaryDirectory() as tmpdir:
                 logging.info("Extracting %s to %s" % (inputfile, tmpdir))
@@ -149,7 +153,7 @@ def collect(inputfile, target, assignment, notebook_filename):
                                                assignment,
                                                notebook_filename))
         else:
-            logging.warning("Don't know what to do with file: %s" % inputfile)
+            logging.fatal("Don't know what to do with file: %s" % inputfile)
             raise NotImplementedError
 
     return submissions
@@ -165,16 +169,21 @@ def setup():
 
 def autograde(api, assignment, force):
     for student in api.get_submitted_students(assignment):
-        api.autograde(assignment, student, force=force)
+        result = api.autograde(assignment, student, force=force)
+        if not result['success']:
+            logging.fatal("There were errors while autograding %s of %s" %
+                          (assignment, student))
 
     return api.get_autograded_students(assignment)
 
 
 def formgrade():
+    print()
     logging.warning("Formgrading must be done manually in a jupyter instance!")
     logging.warning("Run `jupyter notebook --no-browser` and grade manually.")
 
-    input("Press Enter to continue when you are done grading ...")
+    input("Press Enter to continue when you are done formgrading\n"
+          "or Ctrl-c to abort without generating feedback...")
 
 
 def generate_feedback(api, assignment, student, force):
@@ -195,9 +204,8 @@ def collect_feedback(api, assignment, student, output, notebook_filename):
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
-    # coloredlogs.install(fmt='%(asctime)s %(levelname)s %(message)s')
     coloredlogs.install(fmt='%(levelname)s %(message)s')
+    coloredlogs.set_level(logging.INFO)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--assignment',
@@ -206,6 +214,9 @@ def main():
                         required=True)
     parser.add_argument('-f', '--force',
                         help='Pass --force to autograde',
+                        action="store_true")
+    parser.add_argument('-n', '--noop',
+                        help='Do not run autograde and feedback',
                         action="store_true")
     parser.add_argument('-o', '--output',
                         help='Output directory for html feedback',
@@ -231,7 +242,11 @@ def main():
         if submissions:
             logging.info("Found %i submissions" % len(submissions))
         else:
-            logging.warning("No submissions found.")
+            logging.fatal("No submissions found.")
+
+    if args.noop:
+        logging.info("-n was specified, exiting")
+        exit(0)
 
     autograded = autograde(api, assignment, args.force)
     logging.info("%d submissions have been autograded" % len(autograded))
