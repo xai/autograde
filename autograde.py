@@ -15,6 +15,13 @@ from nbgrader.apps import NbGraderAPI
 from traitlets.config import Config
 import py7zr
 
+"""
+TODOs:
+    - check all return codes from nbgrader api calls
+    - deal with old metadata format of submitted notebooks
+    - source project config instead of implicitly setting stuff
+"""
+
 
 class Re(object):
 
@@ -99,7 +106,7 @@ def extract_files(inputfile, target, submission, notebook_filename):
                     os.path.basename(os.path.dirname(f)) == datadir:
                 logging.debug("Data dir found")
                 shutil.copytree(f, os.path.join(submission['dir'],
-                                            datadir), dirs_exist_ok=True)
+                                                datadir), dirs_exist_ok=True)
 
         if not notebook:
             logging.fatal("No notebook found in submission!")
