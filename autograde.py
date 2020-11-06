@@ -3,6 +3,7 @@
 # vim:fenc=utf-8
 
 import argparse
+import json
 import logging
 import os
 import re
@@ -75,12 +76,32 @@ def extract_zip(inputfile, target):
     return [os.path.join(target, f) for f in extracted]
 
 
-def extract_files(inputfile, target, submission, notebook_filename):
+def validate(submission, notebook):
+    errors = []
+    with open(notebook) as f:
+        json_notebook = json.load(f)
+        for index, cell in enumerate(json_notebook["cells"]):
+            if cell['cell_type'] != 'code':
+                continue # and hope for the best :-]
+            lineno = 0
+            for line in cell['source']:
+                lineno += 1
+                if (line[0].strip() == "!") or (line[0].strip() == "%"):
+                    e = ("validate(%s, %s):\n"
+                         "\tShell command found in cell %d, line %d:\n"
+                         "\t> %s"
+                         % (submission['number'], submission['assignment'],
+                            index, lineno, line.strip()))
+                    errors.append(e)
+    return errors
+
+
+def extract_files(inputfile, submission, notebook_filename):
     filename, ext = os.path.splitext(inputfile)
     datadir = 'data'
 
-    notebook = None
     files = []
+    errors = []
 
     with tempfile.TemporaryDirectory() as tmpdir:
         if ext == '.ipynb':
@@ -95,23 +116,35 @@ def extract_files(inputfile, target, submission, notebook_filename):
             logging.debug("> %s" % f)
             if fext == '.ipynb':
                 logging.debug("notebook found: %s" % f)
-                if not notebook:
-                    notebook = f
-                    shutil.copyfile(notebook,
-                                    os.path.join(submission['dir'],
-                                                 notebook_filename))
+                if not submission['notebook']:
+                    submission['notebook'] = f
+                    nberrors = validate(submission, f)
+                    if not nberrors:
+                        os.makedirs(submission['dir'], exist_ok=True)
+                        targetfile = os.path.join(submission['dir'],
+                                                  notebook_filename)
+                    else:
+                        targetfile = os.path.join('dangerous',
+                                                  submission['number'] + '-' +
+                                                  notebook_filename)
+                        errors.extend(nberrors)
+                    shutil.copyfile(f, targetfile)
                 else:
-                    logging.fatal("Multiple notebooks found in submission!")
+                    e = "Multiple notebooks found in submission!"
+                    errors.append("extract_files %s: %s" %
+                                  (submission['number'], e))
             elif os.path.isdir(f) and \
                     os.path.basename(os.path.dirname(f)) == datadir:
                 logging.debug("Data dir found")
+                os.makedirs(submission['dir'], exist_ok=True)
                 shutil.copytree(f, os.path.join(submission['dir'],
                                                 datadir), dirs_exist_ok=True)
 
-        if not notebook:
-            logging.fatal("No notebook found in submission!")
+        if not submission['notebook']:
+            e = "No notebook found in submission!"
+            errors.append("extract_files %s: %s" % (submission['number'], e))
 
-    return files
+    return files, errors
 
 
 def collect(inputfile, target, assignment, notebook_filename):
@@ -126,11 +159,14 @@ def collect(inputfile, target, assignment, notebook_filename):
                      rf"(?P<filename>.+)")
     filename, ext = os.path.splitext(inputfile)
     basename = os.path.basename(inputfile)
+    errors = []
 
     gre = Re()
     if gre.match(pattern_student, basename) or \
        gre.match(pattern_group, basename):
         submission = {}
+        submission['assignment'] = assignment
+        submission['notebook'] = None
 
         if gre.last_match.group('type') == 'h':
             submission['type'] = 'student'
@@ -141,14 +177,15 @@ def collect(inputfile, target, assignment, notebook_filename):
 
         submission['dir'] = os.path.join(target, submission['number'],
                                          assignment)
-        os.makedirs(submission['dir'], exist_ok=True)
 
         logging.info("%s submission found: %s" % (submission['type'],
                                                   basename))
 
-        extract_files(inputfile, target, submission, notebook_filename)
+        files, suberrors = extract_files(inputfile, submission,
+                                         notebook_filename)
 
         submissions.append(submission)
+        errors.extend(suberrors)
     else:
         if ext == '.ipynb':
             logging.fatal("Unmatched notebook found in %s" % inputfile)
@@ -156,14 +193,16 @@ def collect(inputfile, target, assignment, notebook_filename):
             with tempfile.TemporaryDirectory() as tmpdir:
                 logging.info("Extracting %s to %s" % (inputfile, tmpdir))
                 for f in extract_zip(inputfile, tmpdir):
-                    submissions.extend(collect(f, target,
-                                               assignment,
-                                               notebook_filename))
+                    innersubs, innererrors = collect(f, target,
+                                                     assignment,
+                                                     notebook_filename)
+                    submissions.extend(innersubs)
+                    errors.extend(innererrors)
         else:
             logging.fatal("Don't know what to do with file: %s" % inputfile)
             raise NotImplementedError
 
-    return submissions
+    return submissions, errors
 
 
 def setup():
@@ -175,13 +214,15 @@ def setup():
 
 
 def autograde(api, assignment, force):
+    errors = []
     for student in api.get_submitted_students(assignment):
         result = api.autograde(assignment, student, force=force)
         if not result['success']:
-            logging.fatal("There were errors while autograding %s of %s" %
-                          (assignment, student))
+            logging.fatal(result['log'])
+            errors.append("autograde(%s, %s): Errors from nbgrader (scroll up)"
+                          % (student, assignment))
 
-    return api.get_autograded_students(assignment)
+    return api.get_autograded_students(assignment), errors
 
 
 def formgrade():
@@ -208,6 +249,8 @@ def collect_feedback(api, assignment, student, output, notebook_filename):
         logging.info("Collecting feedback from: %s" % html)
         shutil.copy(html, target)
         return 1
+
+    return 0
 
 
 def main():
@@ -241,10 +284,13 @@ def main():
     output = os.path.join(args.output, assignment)
     api = setup()
     notebook_filename = get_notebook_name(api, assignment)
+    os.makedirs('dangerous', exist_ok=True)
+    errors = []
 
     for inputfile in args.inputfiles:
-        submissions = collect(inputfile, args.submissiondir, assignment,
-                              notebook_filename)
+        submissions, inputerrors = collect(inputfile, args.submissiondir,
+                                           assignment, notebook_filename)
+        errors.extend(inputerrors)
 
         if submissions:
             logging.info("Found %i submissions" % len(submissions))
@@ -255,8 +301,13 @@ def main():
         logging.info("-n was specified, exiting")
         exit(0)
 
-    autograded = autograde(api, assignment, args.force)
+    autograded, autograde_errors = autograde(api, assignment, args.force)
+    errors.extend(autograde_errors)
     logging.info("%d submissions have been autograded" % len(autograded))
+    if errors:
+        logging.fatal("There were fatal errors during autograding:")
+        for e in errors:
+            logging.fatal(e)
 
     formgrade()
 
