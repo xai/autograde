@@ -108,6 +108,7 @@ def extract_files(inputfile, submission, notebook_filename):
                 if not submission['notebook']:
                     submission['notebook'] = f
                     nberrors = validate(submission, f)
+                    submission['isvalid'] = not nberrors
                     if not nberrors:
                         os.makedirs(submission['dir'], exist_ok=True)
                         targetfile = os.path.join(submission['dir'],
@@ -173,7 +174,6 @@ def collect(inputfile, target, assignment, notebook_filename):
 
         files, suberrors = extract_files(inputfile, submission,
                                          notebook_filename)
-
         submissions.append(submission)
         errors.extend(suberrors)
     else:
@@ -203,9 +203,12 @@ def setup():
     return NbGraderAPI(config=config)
 
 
-def autograde(api, assignment, force):
+def autograde(api, assignment, submissions, force):
     errors = []
-    for student in api.get_submitted_students(assignment):
+    for submission in submissions:
+        if not submission['isvalid']:
+            continue
+        student = submission['number']
         result = api.autograde(assignment, student, force=force)
         if not result['success']:
             logging.fatal(result['log'])
@@ -275,6 +278,7 @@ def main():
     api = setup()
     notebook_filename = get_notebook_name(api, assignment)
     os.makedirs('dangerous', exist_ok=True)
+    submissions = []
     errors = []
 
     for inputfile in args.inputfiles:
@@ -291,13 +295,15 @@ def main():
         logging.info("-n was specified, exiting")
         exit(0)
 
-    autograded, autograde_errors = autograde(api, assignment, args.force)
+    autograded, autograde_errors = autograde(api, assignment, submissions,
+                                             args.force)
     errors.extend(autograde_errors)
     logging.info("%d submissions have been autograded" % len(autograded))
     if errors:
-        logging.fatal("There were fatal errors during autograding:")
-        for e in errors:
-            logging.fatal(e)
+        logging.fatal("There were %d fatal errors during autograding:" %
+                      len(errors))
+        for i, e in enumerate(errors):
+            logging.fatal("[%d] %s" % (i, e))
 
     formgrade()
 
