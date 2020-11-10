@@ -9,12 +9,11 @@ import os
 import re
 import shutil
 import tempfile
-import zipfile
 
 import coloredlogs
 from nbgrader.apps import NbGraderAPI
 from traitlets.config import Config
-import py7zr
+import patoolib
 
 """
 TODOs:
@@ -55,29 +54,19 @@ def filter(items):
 
 
 def extract_zip(inputfile, target):
-    filename, ext = os.path.splitext(inputfile)
+    patoolib.extract_archive(inputfile, outdir=target)
     extracted = []
-
-    if ext == '.zip':
-        with zipfile.ZipFile(inputfile, 'r') as zipFile:
-            for item in filter(zipFile.namelist()):
-                zipFile.extract(item, path=target)
-                extracted.append(item)
-
-    elif ext == '.7z':
-        with py7zr.SevenZipFile(inputfile, 'r') as zipFile:
-
-            for item in filter(zipFile.getnames()):
-                zipFile.extract(path=target, targets=item)
-                extracted.append(item)
-    else:
-        raise NotImplementedError
-
-    return [os.path.join(target, f) for f in extracted]
+    for root, dirs, files in os.walk(target):
+        for f in filter(files):
+            extracted.append(os.path.join(root, f))
+        for d in filter(dirs):
+            extracted.append(os.path.join(root, d))
+    return extracted
 
 
 def validate(submission, notebook):
     errors = []
+    print(notebook)
     with open(notebook) as f:
         json_notebook = json.load(f)
         for index, cell in enumerate(json_notebook["cells"]):
@@ -136,9 +125,11 @@ def extract_files(inputfile, submission, notebook_filename):
             elif os.path.isdir(f) and \
                     os.path.basename(os.path.dirname(f)) == datadir:
                 logging.debug("Data dir found")
+                data_target_dir = os.path.join(submission['dir'], datadir)
                 os.makedirs(submission['dir'], exist_ok=True)
-                shutil.copytree(f, os.path.join(submission['dir'],
-                                                datadir), dirs_exist_ok=True)
+                if os.path.exists(data_target_dir):
+                    shutil.rmtree(data_target_dir)
+                shutil.copytree(f, data_target_dir)
 
         if not submission['notebook']:
             e = "No notebook found in submission!"
@@ -189,7 +180,7 @@ def collect(inputfile, target, assignment, notebook_filename):
     else:
         if ext == '.ipynb':
             logging.fatal("Unmatched notebook found in %s" % inputfile)
-        elif ext == '.zip' or ext == '.7z':
+        elif ext in ['.zip', '.7z', '.tar.gz', 'tar.bz2', 'tar.xz']:
             with tempfile.TemporaryDirectory() as tmpdir:
                 logging.info("Extracting %s to %s" % (inputfile, tmpdir))
                 for f in extract_zip(inputfile, tmpdir):
