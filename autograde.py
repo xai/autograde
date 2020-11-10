@@ -122,8 +122,7 @@ def extract_files(inputfile, submission, notebook_filename):
                     e = "Multiple notebooks found in submission!"
                     errors.append("extract_files %s: %s" %
                                   (submission['number'], e))
-            elif os.path.isdir(f) and \
-                    os.path.basename(os.path.dirname(f)) == datadir:
+            elif os.path.isdir(f) and os.path.basename(f) == datadir:
                 logging.debug("Data dir found")
                 data_target_dir = os.path.join(submission['dir'], datadir)
                 os.makedirs(submission['dir'], exist_ok=True)
