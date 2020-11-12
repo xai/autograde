@@ -73,13 +73,13 @@ class IllegalStuffValidator(Validator):
 
 class Collector:
 
-    def __init__(self, api, assignment, notebook_filename, datadir):
+    def __init__(self, api, assignment, notebook_filename, datadir="data"):
         self.api = api
         self.assignment = assignment
         self.notebook_filename = notebook_filename
         self.datadir = datadir
-        self.validators = []
         self.dangerous_dir = "dangerous"
+        self.validators = []
 
     def register_validator(self, validator):
         if validator not in self.validators:
@@ -88,6 +88,9 @@ class Collector:
     def unregister_validator(self, validator):
         if validator in self.validators:
             self.validators.remove(validator)
+
+    def set_data_dir(self, datadir):
+        self.datadir = datadir
 
     def set_dangerous_dir(self, dangerous_dir):
         os.makedirs(dangerous_dir, exist_ok=True)
@@ -319,17 +322,16 @@ def main():
 
     api = setup()
     notebook_filename = get_notebook_name(api, assignment)
-    data_dir = "data"
-    dangerous_dir = "dangerous_dir"
 
     if not notebook_filename:
         logging.fatal("No source notebooks found for assignment: %s" %
                       assignment)
         raise RuntimeError
 
-    collector = Collector(api, assignment, notebook_filename, data_dir)
+    collector = Collector(api, assignment, notebook_filename)
+    collector.set_data_dir("data")
+    collector.set_dangerous_dir("dangerous")
     collector.register_validator(IllegalStuffValidator())
-    collector.set_dangerous_dir(dangerous_dir)
 
     submissions = []
     errors = []
