@@ -30,7 +30,8 @@ For example, when running
 
 the following steps will be executed:
 1. retrieve the correct notebook filename from `./source/assignment-2/`
-2. collect student or group submissions from `Submissions.zip`:  
+2. collect student or group submissions from `Submissions.zip`: 
+   - unpack (nested) zipped submissions
    - valid submissions go into `./submitted/(student|group)/assignment-2/`
    - submissions excluded by a validator go into `./dangerous/` instead
 3. autograde each valid submission
