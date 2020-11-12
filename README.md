@@ -34,5 +34,6 @@ the following steps will be executed:
    - valid submissions go into `./submitted/(student|group)/assignment-2/`
    - submissions excluded by a validator go into `./dangerous/` instead
 3. autograde each valid submission
-4. ask you to optionally perform additional formgrading using your browser
+4. list a summary of errors and problems encountered so far
+4. wait and ask you to optionally perform additional formgrading using your browser
 5. generate feedback for each submission and collect all `.html` files into `upload/assignment-2/`
