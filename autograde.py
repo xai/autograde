@@ -73,7 +73,7 @@ class IllegalStuffValidator(Validator):
 
 class Collector:
 
-    def __init__(self, api, assignment, notebook_filename, datadir="data"):
+    def __init__(self, api, assignment, notebook_filename, datadir=["data"]):
         self.api = api
         self.assignment = assignment
         self.notebook_filename = notebook_filename
@@ -195,10 +195,11 @@ class Collector:
                         e = "Multiple notebooks found in submission!"
                         errors.append("collect_files %s: %s" %
                                       (submission['number'], e))
-                elif os.path.isdir(f) and os.path.basename(f) == self.datadir:
-                    logging.debug("Data dir found")
+                elif os.path.isdir(f) and \
+                        os.path.basename(f).lower() in self.datadir:
+                    logging.debug("Data dir found: %s" % os.path.basename(f))
                     data_target_dir = os.path.join(submission['dir'],
-                                                   self.datadir)
+                                                   os.path.basename(f))
                     os.makedirs(submission['dir'], exist_ok=True)
 
                     # copy with overwriting
@@ -329,7 +330,7 @@ def main():
         raise RuntimeError
 
     collector = Collector(api, assignment, notebook_filename)
-    collector.set_data_dir("data")
+    collector.set_data_dir(["data", "daten"])
     collector.set_dangerous_dir("dangerous")
     collector.register_validator(IllegalStuffValidator())
 
