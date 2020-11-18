@@ -57,7 +57,7 @@ class IllegalStuffValidator(Validator):
             json_notebook = json.load(f)
             for index, cell in enumerate(json_notebook["cells"]):
                 if cell['cell_type'] != 'code':
-                    continue # and hope for the best :-]
+                    continue  # and hope for the best :-]
                 lineno = 0
                 for line in cell['source']:
                     lineno += 1
@@ -116,6 +116,7 @@ class Collector:
             submission = {}
             submission['assignment'] = self.assignment
             submission['notebook'] = None
+            submission['datadir'] = None
 
             if gre.last_match.group('type') == 'h':
                 submission['type'] = 'student'
@@ -200,15 +201,28 @@ class Collector:
                             errors.append(e)
                 elif os.path.isdir(f) and \
                         os.path.basename(f).lower() in self.datadir:
-                    logging.debug("Data dir found: %s" % os.path.basename(f))
-                    data_target_dir = os.path.join(submission['dir'],
-                                                   os.path.basename(f))
-                    os.makedirs(submission['dir'], exist_ok=True)
+                    if not submission['datadir']:
+                        logging.debug("Data dir found: %s" %
+                                      os.path.basename(f))
+                        submission['datadir'] = f
+                        data_target_dir = os.path.join(submission['dir'],
+                                                       os.path.basename(f))
+                        os.makedirs(submission['dir'], exist_ok=True)
 
-                    # copy with overwriting
-                    if os.path.exists(data_target_dir):
-                        shutil.rmtree(data_target_dir)
-                    shutil.copytree(f, data_target_dir)
+                        # copy with overwriting
+                        if os.path.exists(data_target_dir):
+                            logging.warning("Overwriting target %s with %s" %
+                                            (data_target_dir, f))
+                            shutil.rmtree(data_target_dir)
+                        shutil.copytree(f, data_target_dir)
+
+                    else:
+                        e = ("collect_files %s: %s" %
+                             (submission['number'],
+                              "Multiple data dirs found in submission!"))
+
+                        if e not in errors:
+                            errors.append(e)
 
             if not submission['notebook']:
                 e = "No notebook found in submission!"
@@ -217,19 +231,35 @@ class Collector:
 
         return files, errors
 
-    def filter(self, items):
-        return [i for i in items if not i.startswith('__MACOSX/')
-                and not i == "__MACOSX"
-                and not i.startswith('.')
-                and not os.path.basename(i).startswith('.')]
+    def filterAndPrune(self, root, items):
+        index = 0
+        length = len(items)
+        while index < length:
+            i = items[index]
+            if i.startswith('__MACOSX') or i.startswith('.'):
+                del items[index]
+                path = os.path.join(root, i)
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                elif os.path.isfile(path):
+                    os.remove(path)
+                else:
+                    logging.warning('Error while pruning: unexpected path %s'
+                                    % path)
+                length -= 1
+            else:
+                index += 1
 
     def extract_zip(self, inputfile, target):
         patoolib.extract_archive(inputfile, outdir=target)
         extracted = []
-        for root, dirs, files in os.walk(target):
-            for f in self.filter(files):
+        for root, dirs, files in os.walk(target, topdown=True):
+            self.filterAndPrune(root, dirs)
+            self.filterAndPrune(root, files)
+
+            for f in files:
                 extracted.append(os.path.join(root, f))
-            for d in self.filter(dirs):
+            for d in dirs:
                 extracted.append(os.path.join(root, d))
         return extracted
 
