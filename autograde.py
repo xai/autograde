@@ -219,6 +219,7 @@ class Collector:
 
     def filter(self, items):
         return [i for i in items if not i.startswith('__MACOSX/')
+                and not i == "__MACOSX"
                 and not i.startswith('.')
                 and not os.path.basename(i).startswith('.')]
 
