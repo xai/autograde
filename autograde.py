@@ -64,12 +64,18 @@ class IllegalStuffValidator(Validator):
                 lineno = 0
                 for line in cell['source']:
                     lineno += 1
-                    if (line[0].strip() == "!") or (line[0].strip() == "%"):
+                    violation = None
+                    if (line[0].strip() == "!"):
+                        violation = "Shell command"
+                    if (line[0].strip() == "%"):
+                        violation = "Built-in magic command"
+
+                    if violation:
                         e = ("validate(%s, %s):\n"
-                             "\tShell command found in cell %d, line %d:\n"
+                             "\t%s found in cell %d, line %d:\n"
                              "\t> %s"
                              % (submission['number'], submission['assignment'],
-                                index, lineno, line.strip()))
+                                violation, index, lineno, line.strip()))
                         violations.append(e)
         return violations
 
