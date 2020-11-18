@@ -192,9 +192,12 @@ class Collector:
                             errors.extend(nberrors)
                         shutil.copyfile(f, targetfile)
                     else:
-                        e = "Multiple notebooks found in submission!"
-                        errors.append("collect_files %s: %s" %
-                                      (submission['number'], e))
+                        e = ("collect_files %s: %s" %
+                             (submission['number'],
+                              "Multiple notebooks found in submission!"))
+
+                        if e not in errors:
+                            errors.append(e)
                 elif os.path.isdir(f) and \
                         os.path.basename(f).lower() in self.datadir:
                     logging.debug("Data dir found: %s" % os.path.basename(f))
