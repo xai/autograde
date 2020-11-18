@@ -334,6 +334,9 @@ def main():
                         help='Name of the assignment',
                         type=str,
                         required=True)
+    parser.add_argument('--dangerous',
+                        help='Do not run validation',
+                        action="store_true")
     parser.add_argument('-f', '--force',
                         help='Pass --force to autograde',
                         action="store_true")
@@ -366,7 +369,9 @@ def main():
     collector = Collector(api, assignment, notebook_filename)
     collector.set_data_dir(["data", "daten"])
     collector.set_dangerous_dir("dangerous")
-    collector.register_validator(IllegalStuffValidator())
+
+    if not args.dangerous:
+        collector.register_validator(IllegalStuffValidator())
 
     submissions = []
     errors = []
