@@ -39,17 +39,20 @@ class Re(object):
 
 class Validator:
 
-    def __init__(self):
-        pass
+    def __init__(self, warn_only=False):
+        self.warn_only = warn_only
 
     def validate(self, submission, notebook):
-        return []
+        raise NotImplementedError
+
+    def is_warn_only(self):
+        return self.warn_only
 
 
 class IllegalStuffValidator(Validator):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, warn_only=False):
+        super().__init__(warn_only)
 
     def validate(self, submission, notebook):
         violations = []
@@ -156,6 +159,7 @@ class Collector:
         return submissions, errors
 
     def collect_files(self, inputfile, submission):
+        submission['invalid'] = False
         filename, ext = os.path.splitext(inputfile)
 
         files = []
@@ -176,21 +180,23 @@ class Collector:
                     logging.debug("notebook found: %s" % f)
                     if not submission['notebook']:
                         submission['notebook'] = f
-                        nberrors = []
                         for validator in self.validators:
-                            nberrors.extend(validator.validate(submission, f))
+                            violations = validator.validate(submission, f)
+                            submission['invalid'] = submission['invalid'] or \
+                                (len(violations) > 0 and
+                                 not validator.is_warn_only())
 
-                        submission['isvalid'] = not nberrors
-                        if not nberrors:
-                            os.makedirs(submission['dir'], exist_ok=True)
-                            targetfile = os.path.join(submission['dir'],
-                                                      self.notebook_filename)
-                        else:
+                            errors.extend(violations)
+
+                        if submission['invalid']:
                             targetfile = os.path.join(self.dangerous_dir,
                                                       submission['number'] +
                                                       '-' +
                                                       self.notebook_filename)
-                            errors.extend(nberrors)
+                        else:
+                            os.makedirs(submission['dir'], exist_ok=True)
+                            targetfile = os.path.join(submission['dir'],
+                                                      self.notebook_filename)
                         shutil.copyfile(f, targetfile)
                     else:
                         e = ("collect_files %s: %s" %
@@ -304,7 +310,7 @@ def setup():
 def autograde(api, assignment, submissions, force):
     errors = []
     for submission in submissions:
-        if not submission['isvalid']:
+        if submission['invalid']:
             continue
         student = submission['number']
         result = api.autograde(assignment, student, force=force)
@@ -370,8 +376,7 @@ def main():
     collector.set_data_dir(["data", "daten"])
     collector.set_dangerous_dir("dangerous")
 
-    if not args.dangerous:
-        collector.register_validator(IllegalStuffValidator())
+    collector.register_validator(IllegalStuffValidator(args.dangerous))
 
     submissions = []
     errors = []
