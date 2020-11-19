@@ -89,6 +89,7 @@ class Collector:
         self.datadir = datadir
         self.dangerous_dir = "dangerous"
         self.validators = []
+        self.interactive = False
 
     def register_validator(self, validator):
         if validator not in self.validators:
@@ -104,6 +105,9 @@ class Collector:
     def set_dangerous_dir(self, dangerous_dir):
         os.makedirs(dangerous_dir, exist_ok=True)
         self.dangerous_dir = dangerous_dir
+
+    def set_interactive(self, interactive):
+        self.interactive = interactive
 
     def collect_submissions(self, inputfile, target):
         submissions = []
@@ -186,13 +190,34 @@ class Collector:
                     logging.debug("notebook found: %s" % f)
                     if not submission['notebook']:
                         submission['notebook'] = f
+                        nbviolations = []
                         for validator in self.validators:
                             violations = validator.validate(submission, f)
-                            submission['invalid'] = submission['invalid'] or \
-                                (len(violations) > 0 and
-                                 not validator.is_warn_only())
+                            if violations:
+                                if validator.is_warn_only():
+                                    for e in violations:
+                                        logging.warn(e)
+                                else:
+                                    submission['invalid'] = True
+                                    nbviolations.extend(violations)
 
-                            errors.extend(violations)
+                        if self.interactive and submission['invalid']:
+                            print()
+                            logging.warning("%d violation(s) found: " %
+                                            len(nbviolations))
+                            for e in nbviolations:
+                                logging.warning(e)
+
+                            no = {'no', 'n'}
+                            choice = input("Is this dangerous?\n"
+                                           "(this notebook will NOT "
+                                           "be executed for autograding "
+                                           "if you answer 'y') ")
+                            if choice in no:
+                                submission['invalid'] = False
+                                nbviolations.clear()
+
+                        errors.extend(nbviolations)
 
                         if submission['invalid']:
                             targetfile = os.path.join(self.dangerous_dir,
@@ -307,9 +332,9 @@ def get_notebook_name(api, assignment):
 
 def setup():
     config = Config()
-    config.Exchange.root = "/tmp/exchange"
-    config.CourseDirectory.submitted_directory = 'submitted'
-    config.CourseDirectory.course_id = 'example_course'
+    # config.Exchange.root = "/tmp/exchange"
+    # config.CourseDirectory.submitted_directory = 'submitted'
+    # config.CourseDirectory.course_id = 'example_course'
     return NbGraderAPI(config=config)
 
 
@@ -347,10 +372,13 @@ def main():
                         type=str,
                         required=True)
     parser.add_argument('--dangerous',
-                        help='Do not run validation',
+                        help='Ignore validation warnings',
+                        action="store_true")
+    parser.add_argument('-i', '--interactive',
+                        help='Pass --interactive to halt on validation errors',
                         action="store_true")
     parser.add_argument('-f', '--force',
-                        help='Pass --force to autograde',
+                        help='Pass --force to nbgrader autograde',
                         action="store_true")
     parser.add_argument('-n', '--noop',
                         help='Do not run autograde and feedback',
@@ -359,10 +387,6 @@ def main():
                         help='Output directory for html feedback',
                         type=str,
                         default='upload')
-    parser.add_argument('-s', '--submissiondir',
-                        help='Submission directory',
-                        type=str,
-                        default='submitted')
 
     parser.add_argument('inputfiles', default=[], nargs='+')
     args = parser.parse_args()
@@ -371,7 +395,14 @@ def main():
     output = os.path.join(args.output, assignment)
 
     api = setup()
+    submissiondir = api.coursedir.submitted_directory
     notebook_filename = get_notebook_name(api, assignment)
+
+    collectonly = args.noop
+
+    if args.dangerous and args.interactive:
+        logging.fatal("--dangerous and --interactive are mutually exclusive")
+        raise RuntimeError
 
     if not notebook_filename:
         logging.fatal("No source notebooks found for assignment: %s" %
@@ -381,6 +412,7 @@ def main():
     collector = Collector(api, assignment, notebook_filename)
     collector.set_data_dir(["data", "daten"])
     collector.set_dangerous_dir("dangerous")
+    collector.set_interactive(args.interactive)
 
     collector.register_validator(IllegalStuffValidator(args.dangerous))
 
@@ -389,8 +421,7 @@ def main():
 
     for inputfile in args.inputfiles:
         submissions, inputerrors = \
-                collector.collect_submissions(inputfile,
-                                              args.submissiondir)
+                collector.collect_submissions(inputfile, submissiondir)
         errors.extend(inputerrors)
 
         if submissions:
@@ -398,8 +429,15 @@ def main():
         else:
             logging.fatal("No submissions found.")
 
-    if args.noop:
-        logging.info("-n was specified, exiting")
+    if args.interactive:
+        no = {'no', 'n'}
+        choice = input("Continue with auto-grading? "
+                       "(all valid notebooks will be executed) ")
+        if choice in no:
+            collectonly = True
+
+    if collectonly:
+        logging.info("autograding was disabled, exiting")
         exit(0)
 
     autograded, autograde_errors = autograde(api, assignment, submissions,
