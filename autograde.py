@@ -12,7 +12,7 @@ import tempfile
 
 import coloredlogs
 from nbgrader.apps import NbGraderAPI
-from traitlets.config import Config
+from traitlets.config import get_config
 import patoolib
 
 """
@@ -331,11 +331,11 @@ def get_notebook_name(api, assignment):
 
 
 def setup():
-    config = Config()
-    # config.Exchange.root = "/tmp/exchange"
-    # config.CourseDirectory.submitted_directory = 'submitted'
-    # config.CourseDirectory.course_id = 'example_course'
-    return NbGraderAPI(config=config)
+    c = None
+    my_glob = {'c': c, 'get_config': get_config}
+    exec(compile(open('nbgrader_config.py', "rb").read(), 'nbgrader_config.py',
+                 'exec'), my_glob)
+    return NbGraderAPI(config=my_glob['c'])
 
 
 def autograde(api, assignment, submissions, force):
