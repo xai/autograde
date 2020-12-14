@@ -6,9 +6,7 @@ To handle zipped submissions, a respective unpacking tool must be present on the
 
 # Usage
 ```
-usage: autograde.py [-h] -a ASSIGNMENT [-f] [-n] [-o OUTPUT]
-                    [-s SUBMISSIONDIR]
-                    inputfiles [inputfiles ...]
+usage: autograde.py [-h] -a ASSIGNMENT [--dangerous] [-i] [-f] [-n] [-o OUTPUT] inputfiles [inputfiles ...]
 
 positional arguments:
   inputfiles
@@ -17,12 +15,12 @@ optional arguments:
   -h, --help            show this help message and exit
   -a ASSIGNMENT, --assignment ASSIGNMENT
                         Name of the assignment
-  -f, --force           Pass --force to autograde
+  --dangerous           Ignore validation warnings
+  -i, --interactive     Pass --interactive to halt on validation errors
+  -f, --force           Pass --force to nbgrader autograde
   -n, --noop            Do not run autograde and feedback
   -o OUTPUT, --output OUTPUT
                         Output directory for html feedback
-  -s SUBMISSIONDIR, --submissiondir SUBMISSIONDIR
-                        Submission directory
 ```
 
 For example, when running  
