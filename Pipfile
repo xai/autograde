@@ -1,0 +1,16 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+nbgrader = "*"
+jupyter = "*"
+coloredlogs = "*"
+nbconvert = "==5.6.1"
+patool = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.8"
