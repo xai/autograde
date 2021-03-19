@@ -420,15 +420,18 @@ def main():
     errors = []
 
     for inputfile in args.inputfiles:
-        submissions, inputerrors = \
+        inputsubmissions, inputerrors = \
                 collector.collect_submissions(inputfile, submissiondir)
         errors.extend(inputerrors)
 
-        if submissions:
-            logging.info("Found %i submissions" % len(submissions))
+        if inputsubmissions:
+            submissions.extend(inputsubmissions)
+            logging.info("Found %i submissions in %s." %
+                         (len(inputsubmissions), inputfile))
         else:
-            logging.fatal("No submissions found.")
+            logging.fatal("No submissions found in %s." % inputfile)
 
+    logging.info("Found a total of %i submissions." % len(submissions))
     if args.interactive:
         no = {'no', 'n'}
         choice = input("Continue with auto-grading? "
