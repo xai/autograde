@@ -7,7 +7,7 @@ name = "pypi"
 nbgrader = "*"
 jupyter = "*"
 coloredlogs = "*"
-nbconvert = "==5.6.1"
+nbconvert = "==6.3.0"
 patool = "*"
 
 [dev-packages]
