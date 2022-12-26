@@ -111,11 +111,11 @@ class Collector:
 
     def collect_submissions(self, inputfile, target):
         submissions = []
-        pattern_student = (rf"^(?P<type>h)(?P<number>[0-9]+)_"
+        pattern_student = (rf"^(?P<number>[0-9]{8})_"
                            rf"(?P<firstname>[^_]+)_"
                            rf"(?P<lastname>[^_]+)_"
                            rf"(?P<filename>.+)")
-        pattern_group = (rf"^(?P<type>Gruppe|Group) (?P<number>[0-9]+)_"
+        pattern_group = (rf"^(?P<isgroup>Gruppe|Group) (?P<number>[0-9]+)_"
                          rf"(?P<firstname>[^_]*)_?"
                          rf"(?P<lastname>[^_]*)_"
                          rf"(?P<filename>.+)")
@@ -131,7 +131,7 @@ class Collector:
             submission['notebook'] = None
             submission['datadir'] = None
 
-            if gre.last_match.group('type') == 'h':
+            if 'isgroup' not in gre.last_match.groupdict():
                 submission['type'] = 'student'
                 submission['number'] = gre.last_match.group('number')
             else:
@@ -178,7 +178,7 @@ class Collector:
         with tempfile.TemporaryDirectory() as tmpdir:
             if ext == '.ipynb':
                 files.append(inputfile)
-            elif ext == '.zip' or ext == '.7z':
+            elif ext in ['.rar', '.zip', '.7z']:
                 files.extend(self.extract_zip(inputfile, tmpdir))
             else:
                 raise NotImplementedError
