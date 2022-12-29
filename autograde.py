@@ -176,7 +176,7 @@ class Collector:
         errors = []
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            if ext == '.ipynb':
+            if os.path.isfile(f) and ext == '.ipynb':
                 files.append(inputfile)
             elif ext in ['.rar', '.zip', '.7z']:
                 files.extend(self.extract_zip(inputfile, tmpdir))
