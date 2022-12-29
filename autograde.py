@@ -111,14 +111,14 @@ class Collector:
 
     def collect_submissions(self, inputfile, target):
         submissions = []
-        pattern_student = (rf"^(?P<number>[0-9]{8})_"
-                           rf"(?P<firstname>[^_]+)_"
-                           rf"(?P<lastname>[^_]+)_"
-                           rf"(?P<filename>.+)")
-        pattern_group = (rf"^(?P<isgroup>Gruppe|Group) (?P<number>[0-9]+)_"
-                         rf"(?P<firstname>[^_]*)_?"
-                         rf"(?P<lastname>[^_]*)_"
-                         rf"(?P<filename>.+)")
+        pattern_student = (r"^(?P<number>[0-9]{8})_"
+                           r"(?P<firstname>[^_]+)_"
+                           r"(?P<lastname>[^_]+)_"
+                           r"(?P<filename>.+)")
+        pattern_group = (r"^(?P<isgroup>Gruppe|Group) (?P<number>[0-9]+)_"
+                         r"(?P<firstname>[^_]*)_?"
+                         r"(?P<lastname>[^_]*)_"
+                         r"(?P<filename>.+)")
         filename, ext = os.path.splitext(inputfile)
         basename = os.path.basename(inputfile)
         errors = []
